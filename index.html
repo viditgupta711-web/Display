@@ -226,6 +226,55 @@
   }
   #status.warn { color: var(--ember); }
 
+
+  /* ---- Rain line ---- */
+  #rain {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: clamp(11px, 2.1vmin, 19px);
+    letter-spacing: 0.06em;
+    color: var(--wet);
+  }
+  #rain.dry { color: var(--ash); }
+  #rain:empty { display: none; }
+
+
+  /* ---- Next twelve hours ---- */
+  #strip {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: clamp(2px, 0.9vmin, 9px);
+    padding-top: clamp(5px, 1.2vmin, 12px);
+    border-top: 1px solid rgba(138, 92, 34, 0.28);
+  }
+  .hr {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(2px, 0.7vmin, 7px);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  .hr .t {
+    font-size: clamp(10px, 2vmin, 18px);
+    color: var(--ember);
+    font-variant-numeric: tabular-nums;
+  }
+  .hr .bar {
+    width: 2px;
+    height: clamp(12px, 2.8vmin, 28px);
+    background: var(--ash);
+    position: relative;
+  }
+  .hr .bar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--wet); }
+  .hr .h {
+    font-size: clamp(8px, 1.6vmin, 14px);
+    color: var(--ash);
+    letter-spacing: 0.06em;
+  }
+  .hr.now .t, .hr.now .h { color: var(--filament-2); }
+
   /* ---- Portrait: stack, weather below the clock ---- */
   @media (orientation: portrait) {
     #main { flex-direction: column; align-items: stretch; justify-content: center; }
@@ -239,6 +288,7 @@
       padding-top: clamp(14px, 4vmin, 40px);
     }
     #temp { font-size: clamp(48px, 16vmin, 150px); }
+    .hr:nth-child(n+9) { display: none; }
   }
 </style>
 </head>
@@ -258,6 +308,7 @@
         <div id="temp">--<span>°</span></div>
       </div>
       <div id="cond">Waiting for weather</div>
+      <div id="rain"></div>
       <div class="rows">
         <div><span>Feels like</span><b id="feels">--°</b></div>
         <div><span>High / low</span><b id="hilo">--° / --°</b></div>
@@ -266,6 +317,8 @@
       </div>
     </div>
   </div>
+
+  <div id="strip"></div>
 
   <div id="arc">
     <div id="track"></div>
@@ -283,6 +336,7 @@
    Or pass them in the URL:  file:///...?lat=51.72&lon=-1.22
    ================================================================= */
 const UNITS = { temp: 'celsius', wind: 'mph' };
+
 
 // Used only if GPS is denied and the network lookup fails too.
 const FALLBACK = { lat: 51.7192, lon: -1.2177, name: 'Oxford' };
@@ -390,6 +444,8 @@ const el = {
   pop:   document.getElementById('pop'),
   wind:  document.getElementById('wind'),
   place: document.getElementById('place'),
+  rain:  document.getElementById('rain'),
+  strip: document.getElementById('strip'),
   status: document.getElementById('status'),
   band:  document.getElementById('band'),
   marker: document.getElementById('marker'),
@@ -471,8 +527,10 @@ function weatherUrl(s) {
   return 'https://api.open-meteo.com/v1/forecast'
     + '?latitude=' + s.lat.toFixed(4) + '&longitude=' + s.lon.toFixed(4)
     + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day'
+    + '&hourly=temperature_2m,precipitation_probability'
+    + '&minutely_15=precipitation'
     + '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset'
-    + '&timezone=auto&forecast_days=1'
+    + '&timezone=auto&forecast_days=2'
     + '&temperature_unit=' + UNITS.temp + '&wind_speed_unit=' + UNITS.wind;
 }
 
@@ -500,6 +558,9 @@ async function loadWeather() {
     el.rise.textContent = pad(sunrise.getHours()) + pad(sunrise.getMinutes());
     el.set.textContent  = pad(sunset.getHours()) + pad(sunset.getMinutes());
 
+    renderHourly(d);
+    renderRain(d);
+
     lastGood = new Date();
     setStatus('');
     moveMarker(new Date());
@@ -513,6 +574,51 @@ async function loadWeather() {
 function setStatus(text, warn) {
   el.status.textContent = text;
   el.status.className = warn ? 'warn' : '';
+}
+
+/* Local timestamp in the same shape Open-Meteo returns, so the two
+   can be compared as plain strings without timezone guesswork. */
+function stamp(d) {
+  const p = function (n) { return n < 10 ? '0' + n : '' + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+       + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* Next twelve hours: temperature above, rain chance as a bar below. */
+function renderHourly(d) {
+  const h = d.hourly;
+  if (!h || !h.time) return;
+  const key = stamp(new Date()).slice(0, 13);
+  let i = h.time.findIndex(function (t) { return t.slice(0, 13) >= key; });
+  if (i < 0) i = 0;
+  const out = [];
+  for (let k = i; k < Math.min(i + 12, h.time.length); k++) {
+    const pop = h.precipitation_probability[k] || 0;
+    out.push('<div class="hr' + (k === i ? ' now' : '') + '">'
+      + '<div class="t">' + Math.round(h.temperature_2m[k]) + '\u00B0</div>'
+      + '<div class="bar"><i style="height:' + Math.max(2, pop) + '%"></i></div>'
+      + '<div class="h">' + h.time[k].slice(11, 13) + '</div></div>');
+  }
+  el.strip.innerHTML = out.join('');
+}
+
+/* First quarter-hour in the next eight with measurable rain. */
+function renderRain(d) {
+  const m = d.minutely_15;
+  if (!m || !m.time) { el.rain.textContent = ''; return; }
+  const now = stamp(new Date());
+  const end = stamp(new Date(Date.now() + 8 * 3600 * 1000));
+  for (let k = 0; k < m.time.length; k++) {
+    if (m.time[k] < now || m.time[k] > end) continue;
+    if (m.precipitation[k] > 0.05) {
+      const mins = Math.round((new Date(m.time[k]) - Date.now()) / 60000);
+      el.rain.className = '';
+      el.rain.textContent = mins <= 10 ? 'Rain now' : 'Rain from ' + m.time[k].slice(11, 16);
+      return;
+    }
+  }
+  el.rain.className = 'dry';
+  el.rain.textContent = 'Dry next 8 hours';
 }
 
 /* Marker walks the daylight band; the band dims once the sun is down. */
