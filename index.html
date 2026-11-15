@@ -360,17 +360,12 @@ function drawClock() {
   moveMarker(now);
 }
 
-/* ---------- Night dimming: the panel eases down after 21:30 and
-     back up at 06:30, so it never glares in a dark room. ---------- */
+/* ---------- Brightness: fixed at 70% all day and night
+     (night dimming removed, Nov 2026). ---------- */
 const panel = document.getElementById('panel');
+const PANEL_BRIGHTNESS = 0.70;
 function applyDimming(now) {
-  const h = now.getHours() + now.getMinutes() / 60;
-  let level;
-  if (h >= 21.5 || h < 6.5)      level = 0.34;
-  else if (h < 7.5)              level = 0.34 + (h - 6.5) * 0.66;
-  else if (h > 20.5)             level = 1 - (h - 20.5) * 0.66;
-  else                           level = 1;
-  panel.style.opacity = level.toFixed(2);
+  panel.style.opacity = PANEL_BRIGHTNESS.toFixed(2);
 }
 
 /* ---------- Weather ---------- */
