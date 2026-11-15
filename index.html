@@ -360,10 +360,10 @@ function drawClock() {
   moveMarker(now);
 }
 
-/* ---------- Brightness: fixed at 70% all day and night
+/* ---------- Brightness: fixed at 100% all day and night
      (night dimming removed, Nov 2026). ---------- */
 const panel = document.getElementById('panel');
-const PANEL_BRIGHTNESS = 0.70;
+const PANEL_BRIGHTNESS = 1.00;
 function applyDimming(now) {
   panel.style.opacity = PANEL_BRIGHTNESS.toFixed(2);
 }
@@ -616,19 +616,18 @@ function renderRain(d) {
   el.rain.textContent = 'Dry next 8 hours';
 }
 
-/* Marker walks the daylight band; the band dims once the sun is down. */
+/* Marker walks the daylight band; always shown at full strength (Nov 2026). */
 function moveMarker(now) {
   if (!sunrise || !sunset) return;
   const span = sunset - sunrise;
   const frac = Math.min(1, Math.max(0, (now - sunrise) / span));
-  const daylight = now >= sunrise && now <= sunset;
 
   const left = 6 + frac * 88;
   el.band.style.left = '6%';
   el.band.style.width = (frac * 88) + '%';
-  el.band.style.opacity = daylight ? '1' : '0.35';
+  el.band.style.opacity = '1';
   el.marker.style.left = left + '%';
-  el.marker.style.opacity = daylight ? '1' : '0.4';
+  el.marker.style.opacity = '1';
 }
 
 /* ---------- Loops ---------- */
