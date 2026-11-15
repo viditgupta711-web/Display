@@ -1,7 +1,7 @@
 /* Clock & Weather — service worker
    Bump CACHE_VERSION whenever you change index.html, so the phone picks up the new build. */
 
-const CACHE_VERSION = 'clock-v3';
+const CACHE_VERSION = 'clock-v4';
 
 const SHELL = [
   './',

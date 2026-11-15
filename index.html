@@ -62,7 +62,7 @@
     height: 100%;
     padding: calc(var(--pad) + env(safe-area-inset-top)) calc(var(--pad) + env(safe-area-inset-right)) calc(var(--pad) + env(safe-area-inset-bottom)) calc(var(--pad) + env(safe-area-inset-left));
     animation: drift 900s ease-in-out infinite;
-    transition: opacity 4s linear;
+    transition: opacity 0.2s linear;
     display: flex;
     flex-direction: column;
     gap: clamp(10px, 2.5vmin, 26px);
@@ -290,6 +290,61 @@
     #temp { font-size: clamp(48px, 16vmin, 150px); }
     .hr:nth-child(n+9) { display: none; }
   }
+
+  /* ---- Brightness bar: tap anywhere to show it, hides itself after
+     a few seconds so nothing sits still on the OLED. Lives outside
+     #panel so it never dims itself. ---- */
+  #bright {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(72vw, 560px);
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 2.4vmin, 18px);
+    padding: clamp(10px, 2vmin, 16px) clamp(14px, 3vmin, 24px);
+    background: rgba(0, 0, 0, 0.88);
+    border: 1px solid rgba(138, 92, 34, 0.55);
+    border-radius: 999px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: clamp(11px, 2.1vmin, 18px);
+    color: var(--filament);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    z-index: 10;
+  }
+  #bright.show { opacity: 1; pointer-events: auto; }
+  #bright .ic { color: var(--ember); font-size: 1.3em; line-height: 1; }
+  #bright b { font-weight: 500; min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+  #brightRange {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 28px;
+    background: transparent;
+    cursor: pointer;
+  }
+  #brightRange::-webkit-slider-runnable-track {
+    height: 3px; border-radius: 2px;
+    background: linear-gradient(to right, var(--filament) var(--fill, 100%), var(--ash) var(--fill, 100%));
+  }
+  #brightRange::-moz-range-track { height: 3px; border-radius: 2px; background: var(--ash); }
+  #brightRange::-moz-range-progress { height: 3px; border-radius: 2px; background: var(--filament); }
+  #brightRange::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px; margin-top: -9.5px;
+    border-radius: 50%;
+    background: var(--filament-2);
+    box-shadow: 0 0 10px 2px rgba(232,163,61,0.45);
+    border: none;
+  }
+  #brightRange::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--filament-2); border: none;
+    box-shadow: 0 0 10px 2px rgba(232,163,61,0.45);
+  }
 </style>
 </head>
 <body>
@@ -330,6 +385,12 @@
   </div>
 </div>
 
+<div id="bright">
+  <span class="ic" aria-hidden="true">&#9788;</span>
+  <input id="brightRange" type="range" min="10" max="100" step="5" value="100" aria-label="Brightness">
+  <b id="brightVal">100%</b>
+</div>
+
 <script>
 /* =================================================================
    SETTINGS — edit the two numbers below for a different location.
@@ -360,13 +421,53 @@ function drawClock() {
   moveMarker(now);
 }
 
-/* ---------- Brightness: fixed at 100% all day and night
-     (night dimming removed, Nov 2026). ---------- */
+/* ---------- Brightness: set by the on-screen bar (10–100%), no
+     time-of-day dimming. Tap the screen to show the bar; it hides
+     after 5 s. The level is remembered on this device. ---------- */
 const panel = document.getElementById('panel');
-const PANEL_BRIGHTNESS = 1.00;
-function applyDimming(now) {
-  panel.style.opacity = PANEL_BRIGHTNESS.toFixed(2);
+const brightBox   = document.getElementById('bright');
+const brightRange = document.getElementById('brightRange');
+const brightVal   = document.getElementById('brightVal');
+const BRIGHT_KEY  = 'clock-brightness';
+
+let panelBrightness = 100;
+try {
+  const saved = parseInt(localStorage.getItem(BRIGHT_KEY), 10);
+  if (saved >= 10 && saved <= 100) panelBrightness = saved;
+} catch (e) { /* storage unavailable: stay at 100% */ }
+
+function applyDimming() {
+  panel.style.opacity = (panelBrightness / 100).toFixed(2);
+  brightRange.value = panelBrightness;
+  brightRange.style.setProperty('--fill', ((panelBrightness - 10) / 90 * 100) + '%');
+  brightVal.textContent = panelBrightness + '%';
 }
+
+let hideTimer = null;
+function showBright() {
+  brightBox.classList.add('show');
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(function () { brightBox.classList.remove('show'); }, 5000);
+}
+
+document.addEventListener('pointerdown', function (e) {
+  if (brightBox.contains(e.target)) { showBright(); return; }
+  if (brightBox.classList.contains('show')) {
+    clearTimeout(hideTimer);
+    brightBox.classList.remove('show');
+  } else {
+    showBright();
+  }
+});
+
+brightRange.addEventListener('input', function () {
+  panelBrightness = parseInt(brightRange.value, 10);
+  applyDimming();
+  showBright();
+  try { localStorage.setItem(BRIGHT_KEY, String(panelBrightness)); } catch (e) {}
+});
+
+applyDimming();
 
 /* ---------- Weather ---------- */
 const WX = {
